@@ -1,0 +1,99 @@
+import PySimpleGUI as sg
+import pandas as pd
+
+# File paths for base and target Excel files
+BASE_FILE_PATH = "C:/Users/Admin/Desktop/File mau/Data DQM.xlsx"
+TARGET_FILE_PATH = "C:/Users/Admin/Desktop/File mau/File nhan mau.xlsx"
+
+# Define the layout for the window
+layout = [
+    [sg.Text("Enter Request Information", background_color="Green", text_color="Yellow", justification="Left")],
+    [sg.Text("Mã số ủy thác:", background_color="Green", text_color="Yellow", size=(15, 1)),
+     sg.InputText(key="Mã số ủy thác", size=(30, 1))],
+    [sg.Button("Autofill"), sg.Button("Submit"), sg.Button("Cancel")],
+    [sg.Text("Người Request:", background_color="Green", text_color="Yellow", size=(15, 1)),
+     sg.InputText(key="Người Request", size=(30, 1))], 
+    [sg.Text("Ngày nhận mẫu:", background_color="Green", text_color="Yellow", size=(15, 1)),
+     sg.InputText(key="Ngày nhận mẫu", size=(30, 1)),
+     sg.CalendarButton("Pick Date", target="Ngày nhận mẫu", format="%Y-%m-%d", button_color=('white', 'blue'))],
+    [sg.Text("Model:", background_color="Green", text_color="Yellow", size=(15, 1)),
+     sg.InputText(key="Model", size=(30, 1))],
+    [sg.Text("Tình trạng:", background_color="Green", text_color="Yellow", size=(15, 1)),
+     sg.Combo(['Normal', 'Urgent'], key="Tình trạng", size=(30, 1))],
+    [sg.Text("Giai đoạn:", background_color="Green", text_color="Yellow", size=(15, 1)),
+     sg.Combo(['DEV', 'MP'], key="Giai đoạn", size=(30, 1))],
+    [sg.Text("Request Part:", background_color="Green", text_color="Yellow", size=(15, 1)),
+     sg.InputText(key="Request Part", size=(30, 1))],
+    [sg.Text("Total Point:", background_color="Green", text_color="Yellow", size=(15, 1)),
+     sg.InputText(key="Total Point", size=(30, 1))],
+]
+
+# Create the window
+window = sg.Window("Request Form", layout)
+
+# Event loop
+while True:
+    event, values = window.read()
+    if event == sg.WIN_CLOSED or event == "Cancel":
+        break
+    elif event == "Autofill":
+        # Validate required fields
+        if not values["Mã số ủy thác"]:
+            sg.popup("Error", "Please fill in the Mã số ủy thác field!", text_color="red")
+            continue
+
+        # Read base Excel file
+        try:
+            base_data = pd.read_excel(BASE_FILE_PATH)
+        except Exception as e:
+            sg.popup("Error", f"Failed to read base Excel file: {e}", text_color="red")
+            continue
+
+        # Check if "Mã số ủy thác" matches in the base file
+        matching_row = base_data[base_data["Mã số ủy thác"] == values["Mã số ủy thác"]]
+
+        if matching_row.empty:
+            sg.popup("Error", "No matching data found in the base file for the provided Mã số ủy thác!", text_color="red")
+            continue
+
+        # Extract autofill data
+        receive_date = matching_row.iloc[0].get("Ngày nhận mẫu", "")
+        model = matching_row.iloc[0].get("Model", "")
+        request_part = matching_row.iloc[0].get("Bộ phận ủy thác", "")
+        total_point = matching_row.iloc[0].get("Phân tích số lượng", "")
+
+        # Determine "Tình trạng" based on 긴급분석여부
+        analysis_status = matching_row.iloc[0].get("긴급분석여부", "")
+        tình_trạng = "Urgent" if analysis_status == "Y" else "Normal"
+
+        # Update input values in the window
+        window["Người Request"].update(matching_row.iloc[0].get("Người ủy thác", ""))
+        window["Ngày nhận mẫu"].update(receive_date)
+        window["Model"].update(model)
+        window["Tình trạng"].update(tình_trạng)
+        window["Request Part"].update(request_part)
+        window["Total Point"].update(total_point)
+    elif event == "Submit":
+        # Prepare new row for the target file
+        new_row = {
+            "DQM": values["Mã số ủy thác"],  # Map Mã số ủy thác to DQM
+            "Người Request": values["Người Request"],
+            "Ngày nhận mẫu": values["Ngày nhận mẫu"],
+            "Model": values["Model"],
+            "Tình trạng": values["Tình trạng"],
+            "Giai đoạn": values["Giai đoạn"],
+            "Request Part": values["Request Part"],
+            "Total Point": values["Total Point"]
+        }
+
+        # Append new row to target Excel file
+        try:
+            target_data = pd.read_excel(TARGET_FILE_PATH)
+            new_row_df = pd.DataFrame([new_row])
+            target_data = pd.concat([target_data, new_row_df], ignore_index=True)
+            target_data.to_excel(TARGET_FILE_PATH, index=False)
+            sg.popup("Success", "Data has been added to the target file.", text_color="green")
+        except Exception as e:
+            sg.popup("Error", f"Failed to write to target Excel file: {e}", text_color="red")
+
+window.close()
